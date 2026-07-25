@@ -24,11 +24,13 @@ import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.UserAgent
 import io.ktor.client.plugins.cache.HttpCache
+import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.plugins.resources.Resources
+import io.ktor.http.auth.Credentials
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
@@ -76,5 +78,26 @@ fun <T : HttpClientEngineConfig> httpClient(
     install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
 
     install(Resources)
+
+    install(Auth) {
+      authenticator = object : io.ktor.client.plugins.Auth.Authenticator {
+        override fun authenticate(route: io.ktor.client.request.HttpClientCall? route, response: io.ktor.client.call.Response): io.ktor.http.Request? {
+          if (response.request.header("Authorization") != null) {
+            return null
+          }
+
+          val url = response.request.url
+          val username = url.username.takeIf { it.isNotBlank() }
+          val password = url.password.takeIf { it.isNotBlank() }
+
+          return when {
+            username != null && password != null -> response.request.newBuilder()
+              .header("Authorization", Credentials.basic(username, password))
+              .build()
+            else -> null
+          }
+        }
+      }
+    }
   }
 }
